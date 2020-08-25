@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<!DOCTYPE mycat:schema SYSTEM "schema.dtd">
+<mycat:schema xmlns:mycat="http://io.mycat/">
+
+    <schema name="TESTDB" checkSQLschema="false" sqlMaxLimit="-1">
+        <table name="sbtest1" dataNode="dn1,dn2,dn3,dn4" rule="sharding-by-id"/>
+        <table name="sbtest2" dataNode="dn5"/>
+    </schema>
+
+    <dataNode name="dn1" dataHost="host1" database="t1"/>
+    <dataNode name="dn2" dataHost="host2" database="t2"/>
+    <dataNode name="dn3" dataHost="host3" database="t3"/>
+    <dataNode name="dn4" dataHost="host4" database="t4"/>
+    <dataNode name="dn5" dataHost="host5" database="t5"/>
+
+    <dataHost name="host1" maxCon="1000" minCon="10" balance="0"
+              writeType="0" dbType="mysql" dbDriver="native" switchType="1" slaveThreshold="100">
+        <heartbeat>select user()</heartbeat>
+        <writeHost host="hostM1" url="127.0.0.1:3306" user="root" password="990923">
+            <readHost user="root" password="990923" url="127.0.0.1:3306" host="hostR1"/>
+        </writeHost>
+    </dataHost>
+
+    <dataHost name="host2" maxCon="1000" minCon="10" balance="0"
+              writeType="0" dbType="mysql" dbDriver="native" switchType="1" slaveThreshold="100">
+        <heartbeat>select user()</heartbeat>
+        <writeHost host="hostM2" url="127.0.0.1:3306" user="root" password="990923">
+            <readHost user="root" password="990923" url="127.0.0.1:3306" host="hostR2"/>
+        </writeHost>
+    </dataHost>
+
+    <dataHost name="host3" maxCon="1000" minCon="10" balance="0"
+              writeType="0" dbType="mysql" dbDriver="native" switchType="1" slaveThreshold="100">
+        <heartbeat>select user()</heartbeat>
+        <writeHost host="hostM3" url="127.0.0.1:3306" user="root" password="990923">
+            <readHost user="root" password="990923" url="127.0.0.1:3306" host="hostR3"/>
+        </writeHost>
+    </dataHost>
+
+    <dataHost name="host4" maxCon="1000" minCon="10" balance="0"
+              writeType="0" dbType="mysql" dbDriver="native" switchType="1" slaveThreshold="100">
+        <heartbeat>select user()</heartbeat>
+        <writeHost host="hostM4" url="127.0.0.1:3306" user="root" password="990923">
+            <readHost user="root" password="990923" url="127.0.0.1:3306" host="hostR4"/>
+        </writeHost>
+    </dataHost>
+    <dataHost name="host5" maxCon="1000" minCon="10" balance="0"
+              writeType="0" dbType="mysql" dbDriver="native" switchType="1" slaveThreshold="100">
+        <heartbeat>select user()</heartbeat>
+        <writeHost host="hostM5" url="127.0.0.1:3306" user="root" password="990923">
+            <readHost user="root" password="990923" url="127.0.0.1:3306" host="hostR4"/>
+        </writeHost>
+    </dataHost>
+</mycat:schema>
