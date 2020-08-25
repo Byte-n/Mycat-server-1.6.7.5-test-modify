@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+
+        <!ELEMENT mycat:streaming  (sql*,table*,dataNode*)>
+        <!ATTLIST mycat:streaming streaming (true|false) "false">
+        <!ATTLIST mycat:streaming sql-hit-hist-num CDATA "10">
+
+
+
+        <!ELEMENT dataNode (sql*,table*)>
+        <!ATTLIST dataNode name ID   #REQUIRED>
+        <!ATTLIST dataNode mode (include|except) "include">
+
+        <!ELEMENT table (sql*)>
+        <!ATTLIST table name ID  #REQUIRED>
+        <!ATTLIST table mode (include|except) "include">
+
+        <!ELEMENT sql ( #PCDATA )>
+        <!ATTLIST sql mode (include|except) "include">
+
+
+

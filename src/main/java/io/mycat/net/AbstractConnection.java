@@ -87,6 +87,10 @@ public abstract class AbstractConnection implements NIOConnection {
 
 	protected final SocketWR socketWR;
 
+	public NIOHandler getHandler() {
+		return handler;
+	}
+
 	public AbstractConnection(NetworkChannel channel) {
 		this.channel = channel;
 		boolean isAIO = (channel instanceof AsynchronousChannel);

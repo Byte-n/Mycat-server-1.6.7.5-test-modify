@@ -113,6 +113,10 @@ public class NIOSocketWR extends SocketWR {
 						break;
 					}
 				}
+				//如果是客户端连接，则调用写后处理
+				if (con instanceof ServerConnection) {
+					((ServerConnection) con).handleAfterWriting(buffer);
+				}
 			} catch (IOException e) {
 				con.recycle(buffer);
 				throw e;
@@ -187,6 +191,12 @@ public class NIOSocketWR extends SocketWR {
 
 	@Override
 	public void asynRead() throws IOException {
+		if (con instanceof MySQLConnection) {
+			if (!((MySQLConnection) con).tryBeginReading()) {
+				LOGGER.debug(con.getId() + "not readyRead");
+				return;
+			}
+		}
 		ByteBuffer theBuffer = con.readBuffer;
 		if (theBuffer == null) {
 			theBuffer = con.processor.getBufferPool().allocate(con.processor.getBufferPool().getChunkSize());

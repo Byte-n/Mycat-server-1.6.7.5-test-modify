@@ -25,6 +25,7 @@ package io.mycat.config;
 
 import io.mycat.backend.datasource.PhysicalDBNode;
 import io.mycat.backend.datasource.PhysicalDBPool;
+import io.mycat.config.loader.xml.XMLStreamingLoader;
 import io.mycat.config.model.FirewallConfig;
 import io.mycat.config.model.SchemaConfig;
 import io.mycat.config.model.SystemConfig;
@@ -65,6 +66,19 @@ public class MycatConfig {
 	private long rollbackTime;
 	private int status;
 	private final ReentrantLock lock;
+	/**
+	 * 流式配置
+	 */
+	private final XMLStreamingLoader streamingConfig;
+
+	/**
+	 * 获取流式配置对象
+	 *
+	 * @return XMLStreamingLoader
+	 */
+	public XMLStreamingLoader getStreamingConfig() {
+		return streamingConfig;
+	}
 
 	public MycatConfig() {
 		//读取schema.xml，rule.xml和server.xml
@@ -81,6 +95,9 @@ public class MycatConfig {
 
 		this.firewall = confInit.getFirewall();
 		this.cluster = confInit.getCluster();
+
+		//读取streaming.xml
+		streamingConfig = new XMLStreamingLoader();
 
 		//初始化重加载配置时间
 		this.reloadTime = TimeUtil.currentTimeMillis();

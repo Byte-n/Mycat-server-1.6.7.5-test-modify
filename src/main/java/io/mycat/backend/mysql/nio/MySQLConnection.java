@@ -708,6 +708,91 @@ public class MySQLConnection extends BackendAIOConnection {
 		return txIsolation;
 	}
 
+
+	/**
+	 * 上一次读的buffer(加入写队列的buffer)
+	 */
+	protected volatile ByteBuffer preReadBuf;
+	/**
+	 * 标记是否开启流式查询
+	 */
+	protected AtomicBoolean streaming;
+
+	/**
+	 * 最小保留内存
+	 */
+//	private static long minFreeMemory = 1024 * 1024 * 2;
+	public ByteBuffer getPreReadBuf() {
+		return this.preReadBuf;
+	}
+
+	/**
+	 * 准备开始读
+	 */
+	public void readyRead() {
+		//置空
+		this.preReadBuf = null;
+	}
+
+	/**
+	 * 标记上次读的内容(加入写队列时的bytebuffer)。
+	 *
+	 * @param buf “
+	 */
+	public void flag(ByteBuffer buf) {
+		if (streaming == null) {
+			return;
+		}
+		if (streaming.get()) {
+			this.preReadBuf = buf;
+		}
+	}
+
+	/**
+	 * 尝试开始读
+	 *
+	 * @return true:可以开始读
+	 */
+	public boolean tryBeginReading() {
+		//如果已经关闭，就调用close清理资源，且返回false
+		if (isClosed()) {
+			this.close(null);
+			return false;
+		}
+		//不是后端查询直接返回true（不是后端查询的例如：登录验证等）
+		if (!isMySQLBackendSelectOperating(this)) {
+			return true;
+		}
+		//第一次时，判断是否开启流式
+		if (streaming == null) {
+			streaming = new AtomicBoolean(MycatServer.getInstance().getConfig().getStreamingConfig().isStreaming(this));
+		}
+		//开启流式控制
+		if (streaming.get()) {
+			return this.isReadyRead();
+		}
+		return true;
+	}
+
+	/**
+	 * 是否准备好了读
+	 *
+	 * @return
+	 */
+	private boolean isReadyRead() {
+		return this.preReadBuf == null;
+	}
+
+	/**
+	 * 是否是MySQL后端查询
+	 *
+	 * @return true:是SELECT
+	 */
+	public static boolean isMySQLBackendSelectOperating(MySQLConnection msc) {
+		return msc.getHandler() instanceof MySQLConnectionHandler && msc.attachment instanceof RouteResultsetNode;
+	}
+
+
 	private static class StatusSync {
 		private final String schema;
 		private final Integer charsetIndex;

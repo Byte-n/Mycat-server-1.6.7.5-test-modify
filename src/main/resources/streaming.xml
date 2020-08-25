@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mycat:streaming SYSTEM "streaming.dtd">
+<!--
+    本流式查询，后端只研究mysql,
+    多节点查询不支持order by、sort等，需要拿取到所有数据后，再做处理，再发送给客户端的查询。
+-->
+<!--
+标签：
+    mycat:streaming
+            sql
+            table
+                sql
+            dataNode
+                sql
+                table
+                    sql
+生效规则：
+    见下面示例
+
+name:
+    name:唯一。
+    重复判断标准：
+        name
+            判断依据：统一转小写后判断
+sql标签没有name:同级标签对里面的内容重复,不会解析后者（解析前的集合去重）。
+    重复判断标准：sql：标签，去除两端空白字符后，判断
+-->
+
+<!--
+streaming:  默认：false
+    true:全局所有后端查询开启流式
+sql-hit-hist-num:   sql标签正则匹配，命中缓存数     默认值：10
+    如果该值有效：（有效值：大于0，且小于Integer.MAX_VALUE。）
+        则每次sql正则判定命中时，则存储这次判定的信息，下次同样的sql可能会直接从命中缓存中获取上次的正则判定结果。
+
+    如果参数不合法，则抛出错误信息（程序会正常启动），参数重置为-1，不会启用sql正则命中缓存。
+
+    合法但是无效的值：小于零
+        不会启用sql正则命中缓存。
+
+-->
+<mycat:streaming streaming="false" sql-hit-hist-num="5">
+    <!--mode：判断模式           有该属性的标签：sql,table,dataNode
+           include：包含（默认）
+           except：排除
+       -->
+    <!--name：表名、节点名          有该属性的标签：table,dataNode-->
+    <!--sql标签：
+        sql标签内为正则表达式：
+            正则表达式判定：Pattern.compile(regex).matcher(sql).matches()；
+    -->
+
+    <!--
+    可用参考：
+        生效规则：
+            sql同级标签，如果有多个正则命中，则下面的覆盖上面的：
+                sql:select * from sbtest1的结果为不开启流式。因为下面两个正则都匹配，第一个是开启流式，第二个是关闭流式。
+                <mycat:streaming streaming="false">
+                    <sql mode="include">.*select\s*\*\s*from.*</sql>
+                    <sql mode="except">^select\s*\*\s*from.*</sql>
+                </mycat:streaming>
+            mycat:streaming标签下：dataNode覆盖table,table覆盖sql
+                 sql:select * from sbtest1的结果为不开启流式。因为<table name="sbtest1" mode="except"/>是关闭流式。
+                <mycat:streaming streaming="false">
+                    <sql mode="include">.*select\s*\*\s*from.*</sql>
+                    <table name="sbtest1" mode="except"/>
+                </mycat:streaming>
+            table，dataNode下如果有更精确的配置，则使用更精确的配置：
+                 sql:select * from sbtest1的结果为开启流式。因为命中了<sql mode="include">^select\s*\*\s*from sbtest1$</sql>
+                <mycat:streaming streaming="false">
+                    <sql mode="include">.*select\s*\*\s*from.*</sql>
+                    <table name="sbtest1" mode="except">
+                        <sql mode="include">^select\s*\*\s*from sbtest1$</sql>
+                    </table>
+                </mycat:streaming>
+    -->
+    <!--每个客户端连接创建后（查询前）都会有这两句获取数据库信息的语句:
+        SHOW WARNINGS
+        /* mysql-connector-java-5.1.37 ...  SELECT  ...
+      全局排除这两句，这两句不开启流式控制
+    -->
+    <sql mode="except">
+        ^SHOW WARNINGS$
+    </sql>
+    <sql mode="except">
+        .*/\* mysql-connector-java-.*SELECT.*
+    </sql>
+
+    <!--全局指定sql开启流式-->
+    <!--.*select\s*\*\s*from.*:匹配所有带'*'号的全表查询-->
+    <sql mode="include">
+        .*select\s*\*\s*from.*
+    </sql>
+
+    <!--全局指定sql关闭流式-->
+    <!--<sql mode="except">
+        ^select id,k,c,pad from sbtest1$
+    </sql>-->
+
+    <!--sql同级标签，如果有多个正则命中，则下面的覆盖上面的-->
+    <!--
+    <sql mode="include">.*select\s*\*\s*from sbtest1$</sql>
+    <sql mode="except">^select\s*\*\s*from.*</sql>
+    -->
+
+    <!--全局指定表格关闭-->
+    <!--<table name="sbtest1" mode="except"/>-->
+
+    <!--全局指定表格关闭,但表格下的指定sql开启流式-->
+    <!--<table name="sbtest1" mode="except">
+        <sql mode="include">
+            .*select\s*\*\s*from.*
+        </sql>
+    </table>-->
+
+    <!--
+        开启流式查询的节点：dn1，dn2，dn3
+        关闭流式查询的节点：dn4
+    -->
+    <!--
+    <dataNode name="dn1"/>
+    <dataNode name="dn2"/>
+    <dataNode name="dn3"/>
+    <dataNode name="dn4" mode="except"/>
+    -->
+
+    <!--不存在的不会生效，也不会影响到其他节点的判定，同理，table标签也一样。sql标签对内的正则，匹配不上，也是一样。-->
+    <!--<dataNode name="dn-null" mode="except"/>-->
+
+    <!--dataNode>sql+(table>sql)-->
+    <!--<dataNode name="dn1">
+        <sql>.*select\s*\*\s*from.*</sql>
+        <table name="sbtest1" mode="except">
+            <sql mode="except">
+                .*select\s*\*\s*from.*
+            </sql>
+        </table>
+    </dataNode>-->
+</mycat:streaming>
+

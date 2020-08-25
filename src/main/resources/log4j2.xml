@@ -28,5 +28,5 @@
         </asyncRoot>
         <logger name="io.mycat.config.loader.xml" level="info"/>
         <logger name="io.mycat.net.NIOSocketWR" level="WARN"/>
-    </Loggers>
+    </Loggers>XMLStreamingLoader
 </Configuration>

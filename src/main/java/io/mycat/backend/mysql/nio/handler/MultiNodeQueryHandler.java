@@ -938,7 +938,8 @@ public class MultiNodeQueryHandler extends MultiNodeHandler implements LoadDataR
 					//add huangyiming
 					MiddlerResultHandler middlerResultHandler = session.getMiddlerResultHandler();
 					if (null == middlerResultHandler) {
-						session.getSource().write(row);
+						//session.getSource().write(row);
+						session.getSource().write(row, conn);
 					} else {
 						if (middlerResultHandler instanceof MiddlerQueryResultHandler) {
 							String rowValue = ResultSetUtil.getColumnValAsString(row, fields, 0);

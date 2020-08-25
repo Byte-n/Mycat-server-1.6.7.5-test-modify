@@ -332,7 +332,8 @@ public class ServerConnection extends FrontendConnection {
 		}
 		if (rrs != null) {
 			// session执行
-			session.execute(rrs, rrs.isSelectForUpdate() ? ServerParse.UPDATE : type);
+//			session.execute(rrs, rrs.isSelectForUpdate() ? ServerParse.UPDATE : type);
+			session.execute(rrs, rrs.isSelectForUpdate() ? ServerParse.UPDATE : type, schema);
 		}
 
 	}
@@ -444,4 +445,133 @@ public class ServerConnection extends FrontendConnection {
 		this.preAcStates = preAcStates;
 	}
 
+	/**
+	 * 写出buffer(this.writeQueue中的)后的处理。
+	 *
+	 * @param writeBuffer 写出的buffer
+	 */
+	public void handleAfterWriting(ByteBuffer writeBuffer) {
+		//获取路由结果和后端连接
+		ConcurrentMap<RouteResultsetNode, BackendConnection> targets =
+				(ConcurrentMap<RouteResultsetNode, BackendConnection>) this.getSession().getTargetMap();
+		MySQLConnection msc;
+		//遍历后端连接
+		for (BackendConnection c : targets.values()) {
+			//MySQLConnection
+			if (c instanceof MySQLConnection) {
+				msc = (MySQLConnection) c;
+				//如果当前写出的buffer和此MySQLConnection连接标记的buff相同，则表明写出的是此MySQLConnection连接上次读取的内容，
+				if (msc.getPreReadBuf() == writeBuffer) {
+					//准备读
+					msc.readyRead();
+				}
+			}
+		}
+	}
+
+	/**
+	 * 根据BackendConnection判断调用写方法
+	 *
+	 * @param data
+	 * @param conn
+	 */
+	public void write(byte[] data, BackendConnection conn) {
+		if (conn instanceof MySQLConnection) {
+			//如果是MySQLConnection就调用带标记buffer操作的写方法
+			write(data, (MySQLConnection) conn);
+		} else {
+			//io.mycat.net.AbstractConnection#write
+			write(data);
+		}
+	}
+	/**
+	 * 将buffer加入写队列，并将buffer标记到MySQLConnection中
+	 *
+	 * @param data ‘
+	 * @param msc  ’
+	 */
+	public void write(byte[] data, MySQLConnection msc) {
+		ByteBuffer buffer = allocate();
+		//将data写入到buffer，并返回buffer。如果中途buffer写满了，
+		//则会调用writeNotSend方法，将buffer加入缓存队列。但是最终都会返回一个buffer供标记使用
+		buffer = writeToBuffer(data, buffer);
+		//加入写队列并标记到MySQLConnection
+		writeAndMySQLFlagBuffer(msc, buffer);
+	}
+
+	/**
+	 * 根据BackendConnection调用不同的处理方法
+	 *
+	 * @param src       ’
+	 * @param buffer    ‘
+	 * @param conn      ‘
+	 * @return  buffer
+	 */
+	public ByteBuffer writeToBuf(byte[] src, ByteBuffer buffer, BackendConnection conn) {
+		if (conn instanceof MySQLConnection) {
+			return writeToBuffer(src, buffer, (MySQLConnection) conn);
+		} else {
+			return writeToBuffer(src, buffer);
+		}
+	}
+
+	/**
+	 * 将src写入buffer。如果buffer满了就将调用：writeAndMySQLFlagBuffer
+	 *
+	 * @param src
+	 * @param buffer
+	 * @param msc
+	 * @return
+	 */
+	public ByteBuffer writeToBuffer(byte[] src, ByteBuffer buffer, MySQLConnection msc) {
+		int offset = 0;
+		int length = src.length;
+		int remaining = buffer.remaining();
+		while (length > 0) {
+			if (remaining >= length) {
+				buffer.put(src, offset, length);
+				break;
+			} else {
+				buffer.put(src, offset, remaining);
+				writeAndMySQLFlagBuffer(msc, buffer);
+				buffer = allocate();
+				offset += remaining;
+				length -= remaining;
+				remaining = buffer.remaining();
+				continue;
+			}
+		}
+		return buffer;
+	}
+
+	/**
+	 * 将buffer加入写队列，并在MySQLConnection中标记此buffer，且MySQLConnection标记为读为未准备就绪
+	 *
+	 * @param msc
+	 * @param buffer
+	 */
+	private void writeAndMySQLFlagBuffer(MySQLConnection msc, ByteBuffer buffer) {
+		//压缩协议判断
+		if (isSupportCompress()) {
+			ByteBuffer newBuffer = CompressUtil.compressMysqlPacket(buffer, this, compressUnfinishedDataQueue);
+			//加入队列
+			writeQueue.offer(newBuffer);
+			//MySQLConnection连接标记buffer
+			msc.flag(newBuffer);
+		} else {
+			writeQueue.offer(buffer);
+			msc.flag(buffer);
+		}
+		if (isClosed()) {
+			LOGGER.warn("write err:{}", this);
+			this.close("found this connection has close , try to reClean the connection");
+			throw new RuntimeException("writeNotSend but found connnection close err:" + this);
+		}
+		try {
+			this.socketWR.doNextWriteCheck();
+		} catch (Exception e) {
+			LOGGER.warn("write err:", e);
+			this.close("write err:" + e);
+		}
+	}
 }

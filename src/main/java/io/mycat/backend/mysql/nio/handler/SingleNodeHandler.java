@@ -524,7 +524,8 @@ public class SingleNodeHandler implements ResponseHandler, Terminatable, LoadDat
 		} else {
 			MiddlerResultHandler middlerResultHandler = session.getMiddlerResultHandler();
 			if (null == middlerResultHandler) {
-				buffer = session.getSource().writeToBuffer(row,allocBuffer());
+				//buffer = session.getSource().writeToBuffer(row,allocBuffer());
+				buffer = session.getSource().writeToBuf(row, allocBuffer(), conn);
 			} else {
 				if (middlerResultHandler instanceof MiddlerQueryResultHandler) {
 					byte[] rv = ResultSetUtil.getColumnVal(row, fields, 0);

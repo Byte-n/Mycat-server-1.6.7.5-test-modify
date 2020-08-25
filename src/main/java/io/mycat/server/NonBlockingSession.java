@@ -53,6 +53,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 /**
  * @author mycat
@@ -114,6 +115,144 @@ public class NonBlockingSession implements Session {
 
     public BackendConnection removeTarget(RouteResultsetNode key) {
         return target.remove(key);
+    }
+
+    /**
+     * 在execute(RouteResultset , int )的基础上，单点查询时，记录表格名称到路由结果中。
+     * @param rrs
+     * @param type
+     * @param schema
+     */
+    public void execute(RouteResultset rrs, int type, SchemaConfig schema) {
+        //调用原本的方法
+        execute(rrs, type);
+        //即使是单节点查询，也记录当前查询的表格到RouteResultset中
+        if (singleNodeHandler != null) {
+            //获取路由结果
+            RouteResultset routeResultset = singleNodeHandler.getRouteResultset();
+            //获取所有路由节点
+            RouteResultsetNode[] nodes = routeResultset.getNodes();
+            if (nodes.length < 1) {//没有路由节点直接返回，不作处理
+                return;
+            }
+            //获取SchemaConfig中的表格
+            Map<String, TableConfig> ts = schema.getTables();
+            if (ts == null) {//为空，直接返回，不作处理
+                return;
+            }
+            //单节点查询，就一个节点
+            String nodeName = nodes[0].getName();
+            //获取当前路由结果的表格
+            List<String> tables = routeResultset.getTables();
+            if (tables == null) {//为空，则创建一个
+                tables = new ArrayList<>();
+                routeResultset.setTables(tables);
+            }
+            //当前查询的SQL语句
+            String sql = routeResultset.getStatement().toUpperCase();
+            //遍历SchemaConfig中的所有表格
+            for (TableConfig v : ts.values()) {
+                //对应的节点为空，则直接进行下一次遍历
+                if (v.getDataNodes().size() < 1) {
+                    continue;
+                }
+                //遍历该表格对应的节点
+                for (String dN : v.getDataNodes()) {
+                    //和当前节点相同,且字符串中有该表格，则加入到当前查询的表格中
+                    if (dN.equals(nodeName) && containsTableName(sql,v.getName().toUpperCase())) {
+                        if (!tables.contains(v.getName())){
+                            tables.add(v.getName());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    /**
+     * 判断sql里面是否包含指定的tableName（不包括注释里面的,区分大小写）
+     *
+     * @param sql       SQL
+     * @param tableName 表格名称
+     * @return true:包含
+     */
+    public boolean containsTableName(String sql, String tableName) {
+        //注释对应的索引下标
+        HashMap<Integer, Integer> noteIndexMap = new HashMap<>();
+        //表格名称对应的索引下标
+        ArrayList<Integer> tableIndexMap = new ArrayList<>();
+        //注释开始索引
+        int nStart = sql.indexOf("/*");
+        //注释结束索引
+        int nEnd = sql.indexOf("*/");
+        //没有注解，就可以直接调用contains判断
+        if (nStart == -1) {
+            //匹配：
+            //表格两边有空格 " tableName "
+            //表格后端没空格（sql结尾） " tableName"
+            //表格后端带';'（sql结尾带分号） " tableName;"
+            //表格后端带'/*'（sql结尾带注释） " tableName/*"。
+            // （sql表格名称后面直接跟/**/，不会被当前版本的MyCat（1.6.7.5-test）正确解析，也不会运行到这里（也就是，不会发起后端查询），但这里也注明这种条件）
+            return Pattern.matches(".*\\s+" + tableName + "($|\\s.*|/*$.*|;$.*)", sql);
+        }
+        //添加到集合中
+        noteIndexMap.put(nStart, nEnd);
+        //循环，是否有多个注解
+        for (; ; ) {
+            nStart = sql.indexOf("/*", nStart + 1);
+            if (nStart == -1) {
+                break;
+            }
+            nEnd = sql.indexOf("*/", nStart);
+            noteIndexMap.put(nStart, nEnd);
+        }
+        //表格索引
+        int tStart = sql.indexOf(tableName);
+        if (tStart == -1) {
+            return false;
+        }
+        tableIndexMap.add(tStart);
+        for (; ; ) {
+            tStart = sql.indexOf(tableName, tStart + 1);
+            if (tStart == -1) {
+                break;
+            }
+            tableIndexMap.add(tStart);
+        }
+        ArrayList<Integer> removeIndex = new ArrayList<>();
+        //遍历所有表格的索引
+        for (Integer i : tableIndexMap) {
+            //遍历注解索引
+            for (Integer s : noteIndexMap.keySet()) {
+                //判断表格是否在注释里面
+                if (i > s && (i + tableName.length()) <= noteIndexMap.get(s)) {
+                    //移除此表格的索引
+                    removeIndex.add(i);
+                }
+            }
+        }
+        tableIndexMap.removeAll(removeIndex);
+        if (tableIndexMap.isEmpty()) {
+            return false;
+        }
+        //向前，后多截取一位
+        int tbs = tableIndexMap.get(0) - 1;
+        int tbe = tbs + tableName.length() + 2;
+        //可能不能向后多截取一位
+        if (tbe >= sql.length()) {
+            tbe = sql.length();
+        }
+        String substring = sql.substring(tbs, tbe);
+        //进行判定的字符串
+        System.out.println("进行判定的字符串" + substring);
+        //匹配
+        //表格两边有空格 " tableName "
+        // 表格后端没空格（sql结尾） " tableName"
+        // 表格后端带';'（sql结尾带分号） " tableName;"
+        // 表格后端带'/'（sql结尾带注释） " tableName/"
+        // （sql表格名称后面直接跟/**/，不会被当前版本的MyCat（1.6.7.5-test）正确解析，也不会运行到这里（也就是，不会发起后端查询），但这里也注明这种条件）
+        boolean matches = Pattern.matches("\\s+" + tableName + "(\\s?|/$|;$)", substring);
+        System.out.println("matches = " + matches);
+        return matches;
     }
 
     @Override
